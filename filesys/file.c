@@ -8,6 +8,8 @@ struct file {
 	struct inode *inode;        /* File's inode. */
 	off_t pos;                  /* Current position. */
 	bool deny_write;            /* Has file_deny_write() been called? */
+	struct lock *read_lock;
+	struct lock *write_lock;
 };
 
 /* Opens a file for the given INODE, of which it takes ownership,
@@ -20,6 +22,9 @@ file_open (struct inode *inode) {
 		file->inode = inode;
 		file->pos = 0;
 		file->deny_write = false;
+		// TODO: assertion `lock != NULL' failed occur
+		// lock_init(file->read_lock);
+		// lock_init(file->write_lock);
 		return file;
 	} else {
 		inode_close (inode);
