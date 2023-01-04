@@ -147,7 +147,7 @@ exit(int status) {
 pid_t
 fork(const char *thread_name) {
 	check_address(thread_name);
-	pid_t pid = process_fork(thread_name, &thread_current()->user_tf);
+	pid_t pid = process_fork(thread_name, NULL);
 	return pid;
 }
 
@@ -205,7 +205,6 @@ open(const char *file) {
 		return fd;
 	}
 	return -1;
-
 }
 
 int

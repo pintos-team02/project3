@@ -24,15 +24,15 @@
 #ifdef VM
 #include "vm/vm.h"
 #endif
-
+static int parse_file_name(char **argv, const char *file_name);
+static void pass_arguments(int argc, char **argv, struct intr_frame *if_);
+static struct thread *get_child_by_tid(tid_t child_tid);
 static void process_cleanup(void);
 static bool load(const char *file_name, struct intr_frame *if_);
 static void initd(void *f_name);
 static void __do_fork(void *);
-static int parse_file_name(char **argv, const char *file_name);
-static void pass_arguments(int argc, char **argv, struct intr_frame *if_);
+
 int get_next_fd(struct file **fdt);
-static struct thread *get_child_by_tid(tid_t child_tid);
 
 /* General process initializer for initd and other process. */
 static void
@@ -87,14 +87,14 @@ initd(void *f_name) {
 /* Clones the current process as `name`. Returns the new process's thread id, or
  * TID_ERROR if the thread cannot be created. */
 tid_t
-process_fork(const char *name, struct intr_frame *if_)
+process_fork(const char *name, struct intr_frame *if_ UNUSED)
 {
 	struct thread *t_curr = thread_current();
-	// t_curr->user_tf = *if_;
 	/* Clone current thread to new thread.*/
-	tid_t tid = thread_create(name, PRI_DEFAULT, __do_fork, t_curr);
-	// if (tid == TID_ERROR)
-	// 	return TID_ERROR;
+	tid_t tid = thread_create(name, PRI_DEFAULT, __do_fork, NULL);
+	if (tid == TID_ERROR) {
+		return TID_ERROR;
+	}
 	sema_down(&t_curr->fork_sema);
 	return tid;
 }
@@ -147,8 +147,8 @@ duplicate_pte(uint64_t *pte, void *va, void *aux) {
 static void
 __do_fork(void *aux) {
 	struct intr_frame if_;
-	struct thread *parent = (struct thread *)aux;
 	struct thread *current = thread_current(); // 자식 쓰레드
+	struct thread *parent = thread_current()->parent;
 	/* TODO: somehow pass the parent_if. (i.e. process_fork()'s if_) */
 	struct intr_frame *parent_if = &parent->user_tf;
 	bool succ = true;
@@ -254,40 +254,18 @@ process_wait(tid_t child_tid) {
 
 	struct thread *t_curr = thread_current();	/* 부모 쓰레드 */
 	struct thread *child_thread = get_child_by_tid(child_tid);
-	// struct list *child_list = &t_curr->child_list;
-
-	// if (!list_empty(child_list))
-	// {
-	// 	struct thread *child_thread;
-	// 	struct list_elem *e;
-
-	// 	for (e = list_begin(child_list); e != list_end(child_list); e = list_next(e))
-	// 	{
-	// 		struct thread *tmp_thread = list_entry(e, struct thread, child_elem);
-	// 		if (tmp_thread->tid == child_tid)
-	// 		{
-	// 			child_thread = tmp_thread;
-	// 			break;
-	// 		}
-	// 	}
-
-
-	// }
-
-	// return -1;
 	if (child_thread == NULL)
 		return -1;
 	sema_down(&child_thread->wait_sema);
 	int exit_status = child_thread->exit_status;
 	list_remove(&child_thread->child_elem);
-	sema_up(&child_thread->free_sema);
+	sema_up(&child_thread->exit_sema);
 	return exit_status;
 }
 
 /* Exit the process. This function is called by thread_exit (). */
 void
 process_exit(void) {
-
 	/* TODO: Your code goes here.
 	 * TODO: Implement process termination message (see
 	 * TODO: project2/process_termination.html).
@@ -297,8 +275,6 @@ process_exit(void) {
 	/* 현재 쓰레드의 fdt에 있는 파일을 close */
 	struct file **fdt = curr->fdt;
 
-	fdt[0] = NULL;
-	fdt[1] = NULL;
 	for (int i = 2; i < FD_LIMIT_LEN; i++) {
 		close(i);
 	}
@@ -307,7 +283,7 @@ process_exit(void) {
 	process_cleanup();
 
 	sema_up(&curr->wait_sema);
-	sema_down(&curr->free_sema);
+	sema_down(&curr->exit_sema);
 }
 
 /* Free the current process's resources. */
@@ -440,11 +416,6 @@ load(const char *file_name, struct intr_frame *if_) {
 
 	/* 실행파일 저장 */
 	int fd = get_next_fd(t->fdt);
-	// if (fd == -1)
-	// {
-	// 	file_close(file);
-	// 	goto done;
-	// }
 	t->next_fd = fd;
 	t->fdt[fd] = file;
 	file_deny_write(file);
@@ -663,89 +634,6 @@ setup_stack(struct intr_frame *if_) {
 	return success;
 }
 
-/* 공백을 구분자로 하여 FILE_NAME(command line)을 단어 단위로 나눈다.
-	{ 파일 이름, 인자, 인자, ... }
-	분할된 단어(token)의 개수(argc)를 반환한다. */
-static int
-parse_file_name(char **argv, const char *file_name) {
-	int argc = 0;
-	char *token, *save_ptr;
-	const char DELIMITER[2] = " ";
-
-	for (token = strtok_r(file_name, DELIMITER, &save_ptr); token != NULL;
-		token = strtok_r(NULL, DELIMITER, &save_ptr))
-	{
-		argv[argc++] = token;
-	}
-
-	return argc;
-}
-
-/* 인자와 파일 이름을 사용자 스택에 차례대로 저장하고,
-	%rsi가 argv를 가리키도록 하고, %rdi는 argc를 가리키도록 한다. */
-static void
-pass_arguments(int argc, char **argv, struct intr_frame *if_) {
-	/* 인자를 커맨드 라인의 오른쪽에서 왼쪽순으로
-		스택에 넣기 위해 argv의 뒤에서부터 순회를 시작 */
-	for (int i = argc - 1; i >= 0; i--)
-	{
-		int arg_size = strlen(argv[i]) + 1;
-		if_->rsp -= arg_size;
-		memcpy((void *)if_->rsp, (void *)argv[i], arg_size);
-
-		/* 두 번째 순회에서 스택에 각 주소값을 넣어야 하기 때문에
-			argv[i]에 주소값을 재할당 */
-		argv[i] = (char *)if_->rsp;
-	}
-
-	/* 바이트 정렬을 위해 주소값을 8의 배수로 맞추고 남는 공간은 0으로 채우기 */
-	int mod = if_->rsp % ALIGNMENT;
-	if (mod)
-	{
-		if_->rsp -= mod;
-		memset((uint8_t *)if_->rsp, 0, mod);
-	}
-
-	/* null pointer sentinel (required by the C standard) */
-	if_->rsp -= CHARP_SIZE;
-	memset((void *)if_->rsp, 0, CHARP_SIZE);
-
-	/* 각 인자의 주소값을 스택에 넣기 */
-	for (int i = argc - 1; i >= 0; i--)
-	{
-		if_->rsp -= CHARP_SIZE;
-		memcpy((void *)if_->rsp, &argv[i], CHARP_SIZE);
-	}
-
-	/* 마지막으로, 여느 스택 프레임과 동일한 구조를 갖추기 위해
-		가짜 반환 주소(return address) 넣기 */
-	if_->rsp -= ADDR_SIZE; /* stack top */
-	memset((void *)if_->rsp, 0, ADDR_SIZE);
-
-	/* rdi, rsi 초기화 */
-	if_->R.rdi = argc;
-	if_->R.rsi = if_->rsp + ADDR_SIZE; /* argv[0]의 주소 */
-}
-
-struct thread *
-	get_child_by_tid(tid_t child_tid) {
-	struct thread *t_curr = thread_current();
-	struct list *child_list = &t_curr->child_list;
-
-	if (!list_empty(child_list))
-	{
-		struct list_elem *e;
-
-		for (e = list_begin(child_list); e != list_end(child_list); e = list_next(e))
-		{
-			struct thread *child_thread = list_entry(e, struct thread, child_elem);
-			if (child_thread->tid == child_tid)
-				return child_thread;
-		}
-	}
-	return NULL;
-}
-
 /* Adds a mapping from user virtual address UPAGE to kernel
  * virtual address KPAGE to the page table.
  * If WRITABLE is true, the user process may modify the page;
@@ -844,4 +732,90 @@ int get_next_fd(struct file **fdt)
 		}
 	}
 	return -1;
+}
+
+
+
+
+/* 공백을 구분자로 하여 FILE_NAME(command line)을 단어 단위로 나눈다.
+	{ 파일 이름, 인자, 인자, ... }
+	분할된 단어(token)의 개수(argc)를 반환한다. */
+static int
+parse_file_name(char **argv, const char *file_name) {
+	int argc = 0;
+	char *token, *save_ptr;
+	const char DELIMITER[2] = " ";
+
+	for (token = strtok_r(file_name, DELIMITER, &save_ptr); token != NULL;
+		token = strtok_r(NULL, DELIMITER, &save_ptr))
+	{
+		argv[argc++] = token;
+	}
+
+	return argc;
+}
+
+/* 인자와 파일 이름을 사용자 스택에 차례대로 저장하고,
+	%rsi가 argv를 가리키도록 하고, %rdi는 argc를 가리키도록 한다. */
+static void
+pass_arguments(int argc, char **argv, struct intr_frame *if_) {
+	/* 인자를 커맨드 라인의 오른쪽에서 왼쪽순으로
+		스택에 넣기 위해 argv의 뒤에서부터 순회를 시작 */
+	for (int i = argc - 1; i >= 0; i--)
+	{
+		int arg_size = strlen(argv[i]) + 1;
+		if_->rsp -= arg_size;
+		memcpy((void *)if_->rsp, (void *)argv[i], arg_size);
+
+		/* 두 번째 순회에서 스택에 각 주소값을 넣어야 하기 때문에
+			argv[i]에 주소값을 재할당 */
+		argv[i] = (char *)if_->rsp;
+	}
+
+	/* 바이트 정렬을 위해 주소값을 8의 배수로 맞추고 남는 공간은 0으로 채우기 */
+	int mod = if_->rsp % ALIGNMENT;
+	if (mod)
+	{
+		if_->rsp -= mod;
+		memset((uint8_t *)if_->rsp, 0, mod);
+	}
+
+	/* null pointer sentinel (required by the C standard) */
+	if_->rsp -= CHARP_SIZE;
+	memset((void *)if_->rsp, 0, CHARP_SIZE);
+
+	/* 각 인자의 주소값을 스택에 넣기 */
+	for (int i = argc - 1; i >= 0; i--)
+	{
+		if_->rsp -= CHARP_SIZE;
+		memcpy((void *)if_->rsp, &argv[i], CHARP_SIZE);
+	}
+
+	/* 마지막으로, 여느 스택 프레임과 동일한 구조를 갖추기 위해
+		가짜 반환 주소(return address) 넣기 */
+	if_->rsp -= ADDR_SIZE; /* stack top */
+	memset((void *)if_->rsp, 0, ADDR_SIZE);
+
+	/* rdi, rsi 초기화 */
+	if_->R.rdi = argc;
+	if_->R.rsi = if_->rsp + ADDR_SIZE; /* argv[0]의 주소 */
+}
+
+struct thread *
+	get_child_by_tid(tid_t child_tid) {
+	struct thread *t_curr = thread_current();
+	struct list *child_list = &t_curr->child_list;
+
+	if (!list_empty(child_list))
+	{
+		struct list_elem *e;
+
+		for (e = list_begin(child_list); e != list_end(child_list); e = list_next(e))
+		{
+			struct thread *child_thread = list_entry(e, struct thread, child_elem);
+			if (child_thread->tid == child_tid)
+				return child_thread;
+		}
+	}
+	return NULL;
 }

@@ -80,12 +80,12 @@ typedef int tid_t;
  * the `magic' member of the running thread's `struct thread' is
  * set to THREAD_MAGIC.  Stack overflow will normally change this
  * value, triggering the assertion. */
-/* The `elem' member has a dual purpose.  It can be an element in
- * the run queue (thread.c), or it can be an element in a
- * semaphore wait list (synch.c).  It can be used these two ways
- * only because they are mutually exclusive: only a thread in the
- * ready state is on the run queue, whereas only a thread in the
- * blocked state is on a semaphore wait list. */
+ /* The `elem' member has a dual purpose.  It can be an element in
+  * the run queue (thread.c), or it can be an element in a
+  * semaphore wait list (synch.c).  It can be used these two ways
+  * only because they are mutually exclusive: only a thread in the
+  * ready state is on the run queue, whereas only a thread in the
+  * blocked state is on a semaphore wait list. */
 struct thread
 {
 	/* Owned by thread.c. */
@@ -106,7 +106,7 @@ struct thread
 	struct list_elem child_elem;
 	struct semaphore wait_sema;	/* 자식 프로세스가 종료될 때 까지 대기 */
 	struct semaphore fork_sema;	/* 자식 프로세스가 파일을 전부 복제할 때 까지 대기 */
-	struct semaphore free_sema; /* 부모가 대기 시작하기 전까지 자식 가둬두기 위한 세마포어 */
+	struct semaphore exit_sema; /* 부모가 대기 시작하기 전까지 자식 가둬두기 위한 세마포어 */
 	struct intr_frame user_tf;  /* Save the userland context. */
 
 	// struct file *running_file;

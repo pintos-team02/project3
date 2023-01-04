@@ -201,7 +201,6 @@ tid_t thread_create(const char *name, int priority,
 	/* Allocate thread. */
 	t = palloc_get_page(PAL_ZERO);
 	if (t == NULL) {
-		sema_up(&parent->fork_sema);
 		return TID_ERROR;
 	}
 	/* Initialize thread. */
@@ -222,7 +221,6 @@ tid_t thread_create(const char *name, int priority,
 	/* allocate file descriptor table */
 	t->fdt = palloc_get_multiple(PAL_ZERO, 3); // ?
 	if (t->fdt == NULL) {
-		sema_up(&parent->fork_sema);
 		return TID_ERROR;
 	}
 	//t->fdt = malloc(sizeof(struct file* ) * 128);
@@ -467,7 +465,7 @@ init_thread(struct thread *t, const char *name, int priority)
 	t->exit_status = 0;
 	sema_init(&t->wait_sema, 0);
 	sema_init(&t->fork_sema, 0);
-	sema_init(&t->free_sema, 0);
+	sema_init(&t->exit_sema, 0);
 	t->parent = NULL;
 	list_init(&t->child_list);
 
