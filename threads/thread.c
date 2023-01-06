@@ -223,6 +223,7 @@ tid_t thread_create(const char *name, int priority,
 	if (t->fdt == NULL) {
 		return TID_ERROR;
 	}
+
 	//t->fdt = malloc(sizeof(struct file* ) * 128);
 	t->fdt[0] = 1; // ? stdin
 	t->fdt[1] = 2; // ? stdout

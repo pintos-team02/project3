@@ -515,7 +515,7 @@ validate_segment(const struct Phdr *phdr, struct file *file) {
 	/* p_offset and p_vaddr must have the same page offset. */
 	if ((phdr->p_offset & PGMASK) != (phdr->p_vaddr & PGMASK))
 		return false;
-
+	
 	/* p_offset must point within FILE. */
 	if (phdr->p_offset > (uint64_t)file_length(file))
 		return false;
