@@ -93,11 +93,15 @@ struct thread
 	enum thread_status status; /* Thread state. */
 	char name[16];			   /* Name (for debugging purposes). */
 	int priority;			   /* Priority. */
+
+	/* project 1 */
 	int64_t wakeup_tick;	   /* 해당 쓰레드가 깨어나야 할 tick을 저장 */
 	struct lock *wait_on_lock; /* 자신이 기다리고 있는 락의 주소 */
 	struct list donations;	   /* 우선순위를 준 스레드 목록 */
 	struct list_elem d_elem;   /* 도너를 연결하기 위한 elem */
 	int old_priority;		   /* 도네이트 받기 전 우선순위 */
+
+	/* project 2 */
 	struct file **fdt;     	   /* File Descriptor Table */
 	int next_fd;               /* 다음에 fd를 넣을 자리 */
 	int exit_status;		   /* 프로세스 종료 상태 */
@@ -113,10 +117,10 @@ struct thread
 	/* Shared between thread.c and synch.c. */
 	struct list_elem elem; /* List element. */
 
-#ifdef USERPROG
+//#ifdef USERPROG
 	/* Owned by userprog/process.c. */
 	uint64_t *pml4; /* Page map level 4 */
-#endif
+//#endif
 #ifdef VM
 	/* Table for whole virtual memory owned by thread. */
 	struct supplemental_page_table spt;

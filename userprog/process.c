@@ -34,6 +34,13 @@ static void __do_fork(void *);
 
 int get_next_fd(struct file **fdt);
 
+struct load_info {
+	size_t page_read_bytes;
+	size_t page_zero_bytes;
+	struct file *file;
+	off_t ofs;
+};
+
 /* General process initializer for initd and other process. */
 static void
 process_init(void) {
@@ -77,7 +84,7 @@ initd(void *f_name) {
 	supplemental_page_table_init(&thread_current()->spt);
 #endif
 
-	// process_init();
+	process_init();
 
 	if (process_exec(f_name) < 0)
 		PANIC("Fail to launch initd\n");
@@ -478,7 +485,7 @@ load(const char *file_name, struct intr_frame *if_) {
 				}
 				if (!load_segment(file, file_page, (void *)mem_page,
 					read_bytes, zero_bytes, writable))
-					goto done;
+						goto done;
 			}
 			else
 				goto done;
@@ -515,7 +522,7 @@ validate_segment(const struct Phdr *phdr, struct file *file) {
 	/* p_offset and p_vaddr must have the same page offset. */
 	if ((phdr->p_offset & PGMASK) != (phdr->p_vaddr & PGMASK))
 		return false;
-
+	
 	/* p_offset must point within FILE. */
 	if (phdr->p_offset > (uint64_t)file_length(file))
 		return false;
@@ -646,7 +653,6 @@ setup_stack(struct intr_frame *if_) {
 static bool
 install_page(void *upage, void *kpage, bool writable) {
 	struct thread *t = thread_current();
-
 	/* Verify that there's not already a page at that virtual
 	 * address, then map our page there. */
 	return (pml4_get_page(t->pml4, upage) == NULL
@@ -684,6 +690,9 @@ load_segment(struct file *file, off_t ofs, uint8_t *upage,
 	ASSERT((read_bytes + zero_bytes) % PGSIZE == 0);
 	ASSERT(pg_ofs(upage) == 0);
 	ASSERT(ofs % PGSIZE == 0);
+	struct load_info *mem_init_info = (struct load_info *) malloc(sizeof(struct load_info));
+	mem_init_info->file = file;
+	mem_init_info->ofs = ofs;
 
 	while (read_bytes > 0 || zero_bytes > 0) {
 		/* Do calculate how to fill this page.
@@ -691,13 +700,15 @@ load_segment(struct file *file, off_t ofs, uint8_t *upage,
 		 * and zero the final PAGE_ZERO_BYTES bytes. */
 		size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
 		size_t page_zero_bytes = PGSIZE - page_read_bytes;
-
+		
 		/* TODO: Set up aux to pass information to the lazy_load_segment. */
-		void *aux = NULL;
+		mem_init_info->page_read_bytes = page_read_bytes;
+		mem_init_info->page_zero_bytes = page_zero_bytes;
+		void *aux = mem_init_info;
 		if (!vm_alloc_page_with_initializer(VM_ANON, upage,
 			writable, lazy_load_segment, aux))
 			return false;
-
+		
 		/* Advance. */
 		read_bytes -= page_read_bytes;
 		zero_bytes -= page_zero_bytes;
@@ -711,13 +722,15 @@ static bool
 setup_stack(struct intr_frame *if_) {
 	bool success = false;
 	void *stack_bottom = (void *)(((uint8_t *)USER_STACK) - PGSIZE);
+	/* You can use the auxillary markers in vm_type of vm/vm.h (e.g. VM_MARKER_0) to mark the page. */
 
 	/* TODO: Map the stack on stack_bottom and claim the page immediately.
+	
 	 * TODO: If success, set the rsp accordingly.
 	 * TODO: You should mark the page is stack. */
 	 /* TODO: Your code goes here */
 
-	return success;
+	return true;
 }
 #endif /* VM */
 
