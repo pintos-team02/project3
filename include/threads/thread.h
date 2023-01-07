@@ -6,28 +6,29 @@
 #include <stdint.h>
 #include "threads/interrupt.h"
 #include "threads/synch.h"
-#ifdef VM
+// #ifdef VM
 #include "vm/vm.h"
-#endif
-
+// #endif
+#include "include/threads/synch.h"
+#include "filesys/file.h"
+#include "include/filesys/file.h"
 /* States in a thread's life cycle. */
-enum thread_status
-{
-	THREAD_RUNNING, /* Running thread. */
-	THREAD_READY,	/* Not running but ready to run. */
-	THREAD_BLOCKED, /* Waiting for an event to trigger. */
-	THREAD_DYING	/* About to be destroyed. */
+enum thread_status {
+	THREAD_RUNNING,     /* Running thread. */
+	THREAD_READY,       /* Not running but ready to run. */
+	THREAD_BLOCKED,     /* Waiting for an event to trigger. */
+	THREAD_DYING        /* About to be destroyed. */
 };
 
 /* Thread identifier type.
    You can redefine this to whatever type you like. */
 typedef int tid_t;
-#define TID_ERROR ((tid_t)-1) /* Error value for tid_t. */
+#define TID_ERROR ((tid_t) -1)          /* Error value for tid_t. */
 
 /* Thread priorities. */
-#define PRI_MIN 0	   /* Lowest priority. */
-#define PRI_DEFAULT 31 /* Default priority. */
-#define PRI_MAX 63	   /* Highest priority. */
+#define PRI_MIN 0                       /* Lowest priority. */
+#define PRI_DEFAULT 31                  /* Default priority. */
+#define PRI_MAX 63                      /* Highest priority. */
 
 /* A kernel thread or user process.
  *
@@ -86,46 +87,47 @@ typedef int tid_t;
   * only because they are mutually exclusive: only a thread in the
   * ready state is on the run queue, whereas only a thread in the
   * blocked state is on a semaphore wait list. */
-struct thread
-{
+struct thread {
 	/* Owned by thread.c. */
-	tid_t tid;				   /* Thread identifier. */
-	enum thread_status status; /* Thread state. */
-	char name[16];			   /* Name (for debugging purposes). */
-	int priority;			   /* Priority. */
-	int64_t wakeup_tick;	   /* 해당 쓰레드가 깨어나야 할 tick을 저장 */
-	struct lock *wait_on_lock; /* 자신이 기다리고 있는 락의 주소 */
-	struct list donations;	   /* 우선순위를 준 스레드 목록 */
-	struct list_elem d_elem;   /* 도너를 연결하기 위한 elem */
-	int old_priority;		   /* 도네이트 받기 전 우선순위 */
-	struct file **fdt;     	   /* File Descriptor Table */
-	int next_fd;               /* 다음에 fd를 넣을 자리 */
-	int exit_status;		   /* 프로세스 종료 상태 */
-	struct thread *parent;     /* 부모 프로세스 포인터 */
-	struct list child_list;	   /* 자식 프로세스 리스트 */
-	struct list_elem child_elem;
-	struct semaphore wait_sema;	/* 자식 프로세스가 종료될 때 까지 대기 */
-	struct semaphore fork_sema;	/* 자식 프로세스가 파일을 전부 복제할 때 까지 대기 */
-	struct semaphore exit_sema; /* 부모가 대기 시작하기 전까지 자식 가둬두기 위한 세마포어 */
-	struct intr_frame user_tf;  /* Save the userland context. */
-
-	// struct file *running_file;
+	tid_t tid;                          /* Thread identifier. */
+	enum thread_status status;          /* Thread state. */
+	char name[16];                      /* Name (for debugging purposes). */
+	int priority;                       /* Priority. */
 	/* Shared between thread.c and synch.c. */
-	struct list_elem elem; /* List element. */
+	struct list_elem elem;              /* List element. */
 
-#ifdef USERPROG
+	/* below three are for priority donation */
+	int base_priority;					/* Represent the priority attribute of the thread itself */
+	struct list lockhold_list;
+	struct lock * waiting_lock;
+
+	// #ifdef USERPROG
+	struct thread* parent_t; /* who is my parent? */
+	struct list children_list; /* who are my children? */
+	struct list_elem child_elem; /* child list element */
+
+	struct semaphore sema_exit;
+	struct semaphore sema_wait;
+	struct semaphore sema_fork;
+	int exit_status;
 	/* Owned by userprog/process.c. */
-	uint64_t *pml4; /* Page map level 4 */
-#endif
-#ifdef VM
-	/* Table for whole virtual memory owned by thread. */
-	struct supplemental_page_table spt;
-#endif
+	uint64_t *pml4;                     /* Page map level 4 */
+	/* file descriptor */
+	struct file **fdt;
+	struct file *executing_file;
+	// #endif
 
-	/* Owned by thread.c. */
-	struct intr_frame tf; /* Information for switching */
-	unsigned magic;		  /* Detects stack overflow. */
+		// #endif
+	// #ifdef VM
+		/* Table for whole virtual memory owned by thread. */
+	struct supplemental_page_table spt;
+	// #endif
+		/* Owned by thread.c. */
+	struct intr_frame tf;               /* Information for switching */
+	struct intr_frame ptf;				/* if from parent*/
+	unsigned magic;                     /* Detects stack overflow. */
 };
+
 
 /* If false (default), use round-robin scheduler.
    If true, use multi-level feedback queue scheduler.
@@ -137,7 +139,7 @@ void thread_start(void);
 
 void thread_tick(void);
 void thread_print_stats(void);
-
+void test_max_priority(void);
 typedef void thread_func(void *aux);
 tid_t thread_create(const char *name, int priority, thread_func *, void *);
 
@@ -159,17 +161,9 @@ void thread_set_nice(int);
 int thread_get_recent_cpu(void);
 int thread_get_load_avg(void);
 
-void thread_sleep(int64_t ticks);
-void thread_awake(int64_t ticks);
-void update_next_tick_to_awake(int64_t ticks);
-int64_t get_next_tick_to_awake(void);
-
 void do_iret(struct intr_frame *tf);
-bool cmp_priority(const struct list_elem *a, const struct list_elem *b, void *aux);
-bool cmp_donation_priority(const struct list_elem *a, const struct list_elem *b, void *aux);
-void test_max_priority(void);
-void donate_priority(void);
-void remove_with_lock(struct lock *lock);
-void refresh_priority(void);
+
 
 #endif /* threads/thread.h */
+
+

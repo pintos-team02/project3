@@ -1,27 +1,30 @@
 #ifndef USERPROG_SYSCALL_H
 #define USERPROG_SYSCALL_H
 
-#include "threads/synch.h"
+#include <stdbool.h>
+#include "threads/thread.h"
 
-typedef int pid_t;
-
-void syscall_init(void);
 struct lock filesys_lock;
 
-void exit(int status);
-void close(int fd);
+
+void syscall_init(void);
+
+
+void check_address(void *addr);
+
+
 void halt(void);
-pid_t fork(const char *thread_name);
-int exec(const char *file);
-int wait(pid_t pid);
+void exit(int status);
+int fork(const char *thread_name);
+int exec(const char *file_name);
+int wait(tid_t pid);
 bool create(const char *file, unsigned initial_size);
 bool remove(const char *file);
 int open(const char *file);
 int filesize(int fd);
-int read(int fd, void *buffer, unsigned length);
-int write(int fd, const void *buffer, unsigned length);
+int read(int fd, void *buffer, unsigned size);
+int write(int fd, const void *buffer, unsigned size);
 void seek(int fd, unsigned position);
 unsigned tell(int fd);
-
-
+void close(int fd);
 #endif /* userprog/syscall.h */

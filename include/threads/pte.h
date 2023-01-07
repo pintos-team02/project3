@@ -28,11 +28,11 @@
 #define PTX(la)  ((((uint64_t) (la)) >> PTXSHIFT) & 0x1FF)
 #define PTE_ADDR(pte) ((uint64_t) (pte) & ~0xFFF)
 
-/* The important flags are listed below.
-   When a PDE or PTE is not "present", the other flags are
-   ignored.
-   A PDE or PTE that is initialized to 0 will be interpreted as
-   "not present", which is just fine. */
+ /* The important flags are listed below.
+    When a PDE or PTE is not "present", the other flags are
+    ignored.
+    A PDE or PTE that is initialized to 0 will be interpreted as
+    "not present", which is just fine. */
 #define PTE_FLAGS 0x00000000000000fffUL    /* Flag bits. */
 #define PTE_ADDR_MASK  0xffffffffffffff000UL /* Address bits. */
 #define PTE_AVL   0x00000e00             /* Bits available for OS use. */
