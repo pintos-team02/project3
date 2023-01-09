@@ -266,7 +266,6 @@ int
 write(int fd, const void *buffer, unsigned size) {
 	check_address(buffer);
 
-
 	if (fd == STDOUT_FILENO) {
 		putbuf(buffer, size);
 		return size;

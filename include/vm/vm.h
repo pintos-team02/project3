@@ -45,10 +45,14 @@ struct page {
 	const struct page_operations *operations;
 	void *va;              /* Address in terms of user space */
 	struct frame *frame;   /* Back reference for frame */
-
+	
 	/* Your implementation */
 	struct hash_elem page_elem;
 	
+	/* by juhong */
+	int stack;
+	bool writable;
+
 	/* Per-type data are binded into the union.
 	 * Each function automatically detects the current union */
 	union {
