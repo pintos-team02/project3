@@ -64,10 +64,10 @@ vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable,
 		switch (type)
 		{
 		case VM_ANON:
-			uninit_new(initial_page, upage, init, type, aux, anon_initializer);
+			uninit_new(initial_page, upage, init, VM_ANON, aux, anon_initializer);
 			break;
 		case VM_FILE:
-			uninit_new(initial_page, upage, init, type, aux, file_backed_initializer);
+			uninit_new(initial_page, upage, init, VM_FILE, aux, file_backed_initializer);
 			break;
 		case 7:
 			/* for setup_stack */
