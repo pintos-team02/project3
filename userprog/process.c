@@ -78,7 +78,6 @@ initd(void *f_name) {
 #endif
 
 	// process_init();
-
 	if (process_exec(f_name) < 0)
 		PANIC("Fail to launch initd\n");
 	NOT_REACHED();
@@ -226,8 +225,7 @@ process_exec(void *f_name) {
 
 	/* And then load the binary */
 	success = load(file_name, &_if);
-
-	//hex_dump(_if.rsp, _if.rsp, USER_STACK - _if.rsp, true);
+	// hex_dump(_if.rsp, _if.rsp, USER_STACK - _if.rsp, true);
 
 	/* If load failed, quit. */
 	palloc_free_page(file_name);
@@ -477,8 +475,9 @@ load(const char *file_name, struct intr_frame *if_) {
 					zero_bytes = ROUND_UP(page_offset + phdr.p_memsz, PGSIZE);
 				}
 				if (!load_segment(file, file_page, (void *)mem_page,
-					read_bytes, zero_bytes, writable))
+					read_bytes, zero_bytes, writable)) {
 					goto done;
+				}
 			}
 			else
 				goto done;
@@ -487,9 +486,10 @@ load(const char *file_name, struct intr_frame *if_) {
 	}
 
 	/* Set up stack. */
-	if (!setup_stack(if_))
+	if (!setup_stack(if_)) {
 		goto done;
 
+	}
 	/* Start address. */
 	if_->rip = ehdr.e_entry;
 
@@ -500,9 +500,9 @@ load(const char *file_name, struct intr_frame *if_) {
 
 done:
 	/* We arrive here whether the load is successful or not. */
-	// if (!success) {
-	// 	file_close (file);
-	// }
+	if (!success) {
+		file_close(file);
+	}
 
 	return success;
 }
@@ -515,7 +515,7 @@ validate_segment(const struct Phdr *phdr, struct file *file) {
 	/* p_offset and p_vaddr must have the same page offset. */
 	if ((phdr->p_offset & PGMASK) != (phdr->p_vaddr & PGMASK))
 		return false;
-	
+
 	/* p_offset must point within FILE. */
 	if (phdr->p_offset > (uint64_t)file_length(file))
 		return false;
@@ -657,11 +657,25 @@ install_page(void *upage, void *kpage, bool writable) {
  * If you want to implement the function for only project 2, implement it on the
  * upper block. */
 
+struct load_aux {
+	struct file *file_aux;
+	size_t page_read_bytes_aux;
+	size_t page_zero_bytes_aux;
+	off_t ofs_aux;
+};
 static bool
 lazy_load_segment(struct page *page, void *aux) {
 	/* TODO: Load the segment from the file */
 	/* TODO: This called when the first page fault occurs on address VA. */
 	/* TODO: VA is available when calling this function. */
+	// printf("lazy_load_segment 진입\n");
+	struct load_aux *load_aux = (struct load_aux *)aux;
+	file_seek(load_aux->file_aux, load_aux->ofs_aux);
+	file_read(load_aux->file_aux, page->frame->kva, load_aux->page_read_bytes_aux);
+	memset(page->frame->kva + load_aux->page_read_bytes_aux, 0, load_aux->page_zero_bytes_aux);
+	//4kb중에 read_bytes 이후 남은 페이지 용량을 0으로 세팅
+	free(aux);
+	return true;
 }
 
 /* Loads a segment starting at offset OFS in FILE at address
@@ -678,6 +692,7 @@ lazy_load_segment(struct page *page, void *aux) {
  *
  * Return true if successful, false if a memory allocation error
  * or disk read error occurs. */
+
 static bool
 load_segment(struct file *file, off_t ofs, uint8_t *upage,
 	uint32_t read_bytes, uint32_t zero_bytes, bool writable) {
@@ -689,34 +704,71 @@ load_segment(struct file *file, off_t ofs, uint8_t *upage,
 		/* Do calculate how to fill this page.
 		 * We will read PAGE_READ_BYTES bytes from FILE
 		 * and zero the final PAGE_ZERO_BYTES bytes. */
-		size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
-		size_t page_zero_bytes = PGSIZE - page_read_bytes;
+		size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE; // pgsize만큼 할지 read_bytes만큼 할지
+		size_t page_zero_bytes = PGSIZE - page_read_bytes; // page 의 남은 여분
+		// printf("\n in process.c / upage : %p\n", upage);
 
-		/* TODO: Set up aux to pass information to the lazy_load_segment. */
-		void *aux = NULL;
-		if (!vm_alloc_page_with_initializer(VM_ANON, upage,
-			writable, lazy_load_segment, aux))
+
+	/* TODO: Set up aux to pass information to the lazy_load_segment. */
+		struct load_aux *aux = (struct load_aux *)malloc(sizeof(struct load_aux));
+		aux->file_aux = file;
+		aux->page_read_bytes_aux = page_read_bytes;
+		aux->page_zero_bytes_aux = page_zero_bytes;
+		aux->ofs_aux = ofs;
+		//aux는 할당해주고 나중에 실제로 데이터 넣으면 해제
+		//아래는 진짜 initialize만 해주는거지 swap in / swap out을 해주는 것이 아님
+		if (!vm_alloc_page_with_initializer(VM_ANON, upage, writable, lazy_load_segment, aux))
 			return false;
 
+		ofs += page_read_bytes; //file읽는 ofs이니까 당연히 PAGE단위로 옮기는게 아니라 읽은만큼씩 옮겨야함
 		/* Advance. */
 		read_bytes -= page_read_bytes;
 		zero_bytes -= page_zero_bytes;
 		upage += PGSIZE;
+		// printf("read_bytes : %p, page_read_bytes: %p\n", read_bytes, page_read_bytes);
+		// printf("zero_bytes : %p\n", zero_bytes);
+		// printf("ofs : %p\n", ofs);
 	}
 	return true;
+}
+
+static bool
+install_page(void *upage, void *kpage, bool writable) {
+	struct thread *t = thread_current();
+
+	/* Verify that there's not already a page at that virtual
+	 * address, then map our page there. */
+	return (pml4_get_page(t->pml4, upage) == NULL
+		&& pml4_set_page(t->pml4, upage, kpage, writable));
 }
 
 /* Create a PAGE of stack at the USER_STACK. Return true on success. */
 static bool
 setup_stack(struct intr_frame *if_) {
+
+	uint8_t *kpage;
 	bool success = false;
-	void *stack_bottom = (void *)(((uint8_t *)USER_STACK) - PGSIZE);
 
-	/* TODO: Map the stack on stack_bottom and claim the page immediately.
-	 * TODO: If success, set the rsp accordingly.
-	 * TODO: You should mark the page is stack. */
-	 /* TODO: Your code goes here */
+	kpage = palloc_get_page(PAL_USER | PAL_ZERO);
+	if (kpage != NULL) {
+		success = install_page(((uint8_t *)USER_STACK) - PGSIZE, kpage, true);
+		if (success)
+			if_->rsp = USER_STACK;
+		else
+			palloc_free_page(kpage);
+	}
 
+
+
+	// bool success = false;
+	// void *stack_bottom = (void *)(((uint8_t *)USER_STACK) - PGSIZE);
+
+	// /* TODO: Map the stack on stack_bottom and claim the page immediately.
+	//  * TODO: If success, set the rsp accordingly.
+	//  * TODO: You should mark the page is stack. */
+	//  /* TODO: Your code goes here */
+	// printf("setup stack...\n");
+	success = true;
 	return success;
 }
 #endif /* VM */
@@ -799,6 +851,8 @@ pass_arguments(int argc, char **argv, struct intr_frame *if_) {
 	/* rdi, rsi 초기화 */
 	if_->R.rdi = argc;
 	if_->R.rsi = if_->rsp + ADDR_SIZE; /* argv[0]의 주소 */
+
+
 }
 
 struct thread *
