@@ -43,6 +43,7 @@ static bool vm_do_claim_page (struct page *page);
 static struct frame *vm_evict_frame (void);
 uint64_t va_hash(const struct hash_elem *e, void *aux);
 bool va_less(const struct hash_elem *a, const struct hash_elem *b, void *aux);
+struct page *page_lookup(const void *address, struct supplemental_page_table* spt);
 
 /* Create the pending page object with initializer. If you want to create a
  * page, do not create it directly and make it through this function or
@@ -88,9 +89,8 @@ err:
 /* Find VA from spt and return page. On error, return NULL. */
 struct page *
 spt_find_page (struct supplemental_page_table *spt UNUSED, void *va UNUSED) {
-	struct page *page = NULL;
 	/* TODO: Fill this function. */
-	page = page_lookup(pg_round_down(va),spt);
+	struct page *page = page_lookup(pg_round_down(va),spt);
 	return page;
 }
 
@@ -166,6 +166,19 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 	struct page *page = NULL;
 	/* TODO: Validate the fault */
 	/* TODO: Your code goes here */
+
+	if (is_kernel_vaddr(addr)){
+		return false;
+	}
+
+	if (not_present)
+	{
+		page = spt_find_page(spt, addr);
+		if (page == NULL)
+			return false;
+		if(!vm_claim_page(page->va))
+			return false;
+	}
 
 	return vm_do_claim_page (page);
 }
