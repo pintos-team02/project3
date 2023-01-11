@@ -34,6 +34,13 @@ static void __do_fork(void *);
 
 int get_next_fd(struct file **fdt);
 
+struct load_info {
+	size_t page_read_bytes;
+	size_t page_zero_bytes;
+	struct file *file;;
+	off_t offset;
+};
+
 /* General process initializer for initd and other process. */
 static void
 process_init(void) {
@@ -662,6 +669,20 @@ lazy_load_segment(struct page *page, void *aux) {
 	/* TODO: Load the segment from the file */
 	/* TODO: This called when the first page fault occurs on address VA. */
 	/* TODO: VA is available when calling this function. */
+	struct load_info *loaded_info = (struct load_info *)aux;
+	size_t page_read_bytes = loaded_info->page_read_bytes;
+	size_t page_zero_bytes = loaded_info->page_zero_bytes;
+	off_t ofs = loaded_info->offset;
+
+	file_seek(loaded_info->file, ofs);
+	if (file_read(loaded_info->file, page->frame->kva, page_read_bytes) != page_read_bytes){
+		return false;
+	}
+	memset(page->frame->kva + page_read_bytes, 0, page_zero_bytes);
+	free(loaded_info);
+	
+	return true;
+
 }
 
 /* Loads a segment starting at offset OFS in FILE at address
@@ -694,6 +715,14 @@ load_segment(struct file *file, off_t ofs, uint8_t *upage,
 
 		/* TODO: Set up aux to pass information to the lazy_load_segment. */
 		void *aux = NULL;
+		struct load_info *load_aux = (struct load_info *)calloc(1, sizeof(struct load_info));
+		load_aux->page_read_bytes = page_read_bytes;
+		load_aux->page_zero_bytes = page_zero_bytes;
+		load_aux->file = file;
+		load_aux->offset = ofs;
+		
+		aux = load_aux;
+
 		if (!vm_alloc_page_with_initializer(VM_ANON, upage,
 			writable, lazy_load_segment, aux))
 			return false;
@@ -702,6 +731,8 @@ load_segment(struct file *file, off_t ofs, uint8_t *upage,
 		read_bytes -= page_read_bytes;
 		zero_bytes -= page_zero_bytes;
 		upage += PGSIZE;
+
+		ofs += page_read_bytes;
 	}
 	return true;
 }
