@@ -12,6 +12,7 @@
 #include "filesys/filesys.h"
 #include "filesys/file.h"
 #include "threads/palloc.h"
+#include "vm/vm.h"
 
 
 void syscall_entry(void);
@@ -53,7 +54,7 @@ void
 syscall_handler(struct intr_frame *f) {
 	/* 포인터 유효성 검증 */
 	struct thread *t_curr = thread_current();
-
+	t_curr->stack_pointer = f->rsp;
 	switch (f->R.rax)
 	{
 	case SYS_HALT:
@@ -112,22 +113,41 @@ syscall_handler(struct intr_frame *f) {
 	case SYS_CLOSE:
 		close(f->R.rdi);
 		break;
+	
+	case SYS_MMAP:
+		f->R.rax = mmap(f->R.rdi,f->R.rsi,f->R.rdx, f->R.rcx,f->R.r8);
+		break;
+
+	case SYS_MUNMAP:
+		munmap(f->R.rdi);
+		break;
 
 	default:
 		thread_exit();
 	}
 }
 
-static void
+void
 check_address(void *addr) {
-	// 1. 포인터 유효성 검증
-	//		<유효하지 않은 포인터>
-	//		- 널 포인터
-	//		- virtual memory와 매핑 안 된 영역
-	//		- 커널 가상 메모리 주소 공간을 가리키는 포인터 (=PHYS_BASE 위의 영역)
-	// 2. 유저 영역을 벗어난 영역일 경우 프로세스 종료((exit(-1)))
-	if (addr == NULL || is_kernel_vaddr(addr) || pml4_get_page(thread_current()->pml4, addr) == NULL) {
+	/* project3 modification 
+	*  lazy_load_segment로 pml4_get_page NULL이 나오는것은 자연스러운 것.
+	*/
+
+	/* 1. 포인터 유효성 검증
+	 *  <유효하지 않은 포인터>
+	 *  - 널 포인터
+	 *  - virtual memory와 매핑 안 된 영역
+	 *  - 커널 가상 메모리 주소 공간을 가리키는 포인터 (=PHYS_BASE 위의 영역)
+	 * 2. 유저 영역을 벗어난 영역일 경우 프로세스 종료((exit(-1)))
+	 */
+	struct thread *t_curr = thread_current();
+	if (addr == NULL || is_kernel_vaddr(addr)) {
 		exit(-1);
+	}
+
+	if (pml4_get_page(t_curr->pml4, addr) == NULL) {
+		if (!spt_find_page(&t_curr->spt, addr))
+			exit(-1);
 	}
 }
 
@@ -220,6 +240,10 @@ filesize(int fd) {
 int
 read(int fd, void *buffer, unsigned size) {
 	check_address(buffer);
+	
+	struct page* page = spt_find_page(&thread_current()->spt, buffer);
+	if (!page->writable)
+		exit(-1);
 
 	if (fd == STDIN_FILENO)
 	{
@@ -265,6 +289,9 @@ read(int fd, void *buffer, unsigned size) {
 int
 write(int fd, const void *buffer, unsigned size) {
 	check_address(buffer);
+	struct page* page = spt_find_page(&thread_current()->spt, buffer);
+	if (!page->writable)
+		exit(-1);
 
 	if (fd == STDOUT_FILENO) {
 		putbuf(buffer, size);
@@ -337,4 +364,17 @@ intr_frame_cpy(struct intr_frame *f)
 {
 	struct thread *t_curr = thread_current();
 	memcpy(&t_curr->user_tf, f, sizeof(struct intr_frame));
+}
+
+void *
+mmap (void *addr, size_t length, int writable, int fd, off_t offset) {
+	struct thread *t_curr = thread_current();
+	struct file *file = t_curr->fdt[fd];
+
+	return do_mmap(addr, length, writable, file, offset);
+}
+
+void
+munmap (void *addr) {
+	do_munmap(addr);
 }

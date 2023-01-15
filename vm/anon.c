@@ -28,9 +28,6 @@ vm_anon_init(void) {
 bool
 anon_initializer(struct page *page, enum vm_type type, void *kva) {
 	
-	// struct uninit_page *uninit = &page->uninit;
-	// memset(uninit, 0, sizeof(struct uninit_page));
-
 	/* Set up the handler */
 	page->operations = &anon_ops;
 	struct anon_page *anon_page = &page->anon;
@@ -53,5 +50,6 @@ anon_swap_out(struct page *page) {
 /* Destroy the anonymous page. PAGE will be freed by the caller. */
 static void
 anon_destroy(struct page *page) {
+	/* aux를 해제해주어야하는데... */
 	struct anon_page *anon_page = &page->anon;
 }

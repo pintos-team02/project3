@@ -19,7 +19,6 @@
 #include "threads/mmu.h"
 #include "threads/vaddr.h"
 #include "intrinsic.h"
-#include "threads/vaddr.h"        
 
 #ifdef VM
 #include "vm/vm.h"
@@ -34,12 +33,7 @@ static void __do_fork(void *);
 
 int get_next_fd(struct file **fdt);
 
-struct load_info {
-	size_t page_read_bytes;
-	size_t page_zero_bytes;
-	struct file *file;
-	off_t ofs;
-};
+
 
 /* General process initializer for initd and other process. */
 static void
@@ -156,6 +150,7 @@ __do_fork(void *aux) {
 	struct intr_frame if_;
 	struct thread *current = thread_current(); // 자식 쓰레드
 	struct thread *parent = thread_current()->parent;
+	
 	/* TODO: somehow pass the parent_if. (i.e. process_fork()'s if_) */
 	struct intr_frame *parent_if = &parent->user_tf;
 	bool succ = true;
@@ -201,7 +196,7 @@ __do_fork(void *aux) {
 
 	current->next_fd = parent->next_fd;
 
-	// process_init();
+	process_init();
 
 	/* Finally, switch to the newly created process. */
 	if (succ) {
@@ -288,6 +283,7 @@ process_exit(void) {
 	// fdt 반환
 	palloc_free_multiple(fdt, 3);
 	process_cleanup();
+	// TODO: hash_destory를 고려해보자. bucket free까지 해줘서 메모리 누수 방지
 
 	sema_up(&curr->wait_sema);
 	sema_down(&curr->exit_sema);
@@ -386,9 +382,6 @@ struct ELF64_PHDR {
 
 static bool setup_stack(struct intr_frame *if_);
 static bool validate_segment(const struct Phdr *, struct file *);
-static bool load_segment(struct file *file, off_t ofs, uint8_t *upage,
-	uint32_t read_bytes, uint32_t zero_bytes,
-	bool writable);
 
 /* Loads an ELF executable from FILE_NAME into the current thread.
  * Stores the executable's entry point into *RIP
@@ -619,6 +612,7 @@ load_segment(struct file *file, off_t ofs, uint8_t *upage,
 		read_bytes -= page_read_bytes;
 		zero_bytes -= page_zero_bytes;
 		upage += PGSIZE;
+		
 	}
 	return true;
 }
@@ -663,24 +657,23 @@ install_page(void *upage, void *kpage, bool writable) {
  * If you want to implement the function for only project 2, implement it on the
  * upper block. */
 
-static bool
+bool
 lazy_load_segment(struct page *page, void *aux) {
 	/* TODO: Load the segment from the file */
 	/* TODO: This called when the first page fault occurs on address VA. */
 	/* TODO: VA is available when calling this function. */
-	printf("lazy_load_segment: page->va = %p\n", page->va);
-	printf("lazy_load_segment: page->frame->kva = %p\n", page->frame->kva);
 	
 	struct load_info *info = (struct load_info *)aux;
 	file_seek(info->file, info->ofs);
+
 	/* Load this page. */
 	if (file_read(info->file, page->frame->kva, info->page_read_bytes) != (int)info->page_read_bytes) {
 		palloc_free_page(page->frame->kva);
 		return false;
 	}
-
 	memset(page->frame->kva + info->page_read_bytes, 0, info->page_zero_bytes);
-
+	
+	// TODO: free(aux) 어디서??
 	return true;
 }
 
@@ -698,7 +691,7 @@ lazy_load_segment(struct page *page, void *aux) {
  *
  * Return true if successful, false if a memory allocation error
  * or disk read error occurs. */
-static bool
+bool
 load_segment(struct file *file, off_t ofs, uint8_t *upage,
 	uint32_t read_bytes, uint32_t zero_bytes, bool writable) {
 
@@ -713,11 +706,14 @@ load_segment(struct file *file, off_t ofs, uint8_t *upage,
 		size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
 		size_t page_zero_bytes = PGSIZE - page_read_bytes;
 		/* TODO: Set up aux to pass information to the lazy_load_segment. */
+
 		struct load_info *mem_init_info = (struct load_info *)calloc(1, sizeof(struct load_info));
 		mem_init_info->file = file;
 		mem_init_info->ofs = ofs;
+		
 		mem_init_info->page_read_bytes = page_read_bytes;
 		mem_init_info->page_zero_bytes = page_zero_bytes;
+
 		void *aux = mem_init_info;
 		if (!vm_alloc_page_with_initializer(VM_ANON, upage,
 			writable, lazy_load_segment, aux))
@@ -727,6 +723,9 @@ load_segment(struct file *file, off_t ofs, uint8_t *upage,
 		read_bytes -= page_read_bytes;
 		zero_bytes -= page_zero_bytes;
 		upage += PGSIZE;
+
+		/* 오프셋을 옮겨보자 */
+		ofs += page_read_bytes;
 	}
 	return true;
 }
@@ -741,10 +740,10 @@ setup_stack(struct intr_frame *if_) {
 	 * TODO: If success, set the rsp accordingly.
 	 * TODO: You should mark the page is stack. */
 	/* TODO: Your code goes here */
-	if (vm_alloc_page(7, stack_bottom, true))
-	{
+	if (vm_alloc_page(VM_STACK, stack_bottom, true))
+	{	
 		if (vm_claim_page(stack_bottom))
-		{
+		{	
 			if_->rsp = USER_STACK;
 			success = true;
 		}
@@ -769,8 +768,6 @@ int get_next_fd(struct file **fdt)
 	}
 	return -1;
 }
-
-
 
 
 /* 공백을 구분자로 하여 FILE_NAME(command line)을 단어 단위로 나눈다.

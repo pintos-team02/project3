@@ -64,4 +64,14 @@ uninit_destroy (struct page *page) {
 	struct uninit_page *uninit UNUSED = &page->uninit;
 	/* TODO: Fill this function.
 	 * TODO: If you don't have anything to do, just return. */
+
+	/* 할당 받은 aux 해제 */
+	if (uninit->type == VM_UNINIT) {
+		if (uninit->aux)
+		{
+			free(uninit->aux);
+
+		}
+	}
+	
 }
