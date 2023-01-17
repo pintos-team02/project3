@@ -14,6 +14,9 @@ enum vm_type {
 	/* page that hold the page cache, for project 4 */
 	VM_PAGE_CACHE = 3,
 
+	/* page taht related to the stack */
+	VM_STACK = 7,
+
 	/* Bit flags to store state */
 
 	/* Auxillary bit flag marker for store information. You can add more
@@ -48,7 +51,7 @@ struct page {
 
 	/* Your implementation */
 	struct hash_elem page_elem;
-
+	bool stack;
 	bool writable;
 
 	/* Per-type data are binded into the union.

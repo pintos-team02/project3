@@ -665,6 +665,17 @@ install_page(void *upage, void *kpage, bool writable) {
  * upper block. */
 
 static bool
+install_page(void *upage, void *kpage, bool writable) {
+	struct thread *t = thread_current();
+
+	/* Verify that there's not already a page at that virtual
+	 * address, then map our page there. */
+	return (pml4_get_page(t->pml4, upage) == NULL
+		&& pml4_set_page(t->pml4, upage, kpage, writable));
+}
+
+
+static bool
 lazy_load_segment(struct page *page, void *aux) {
 	/* TODO: Load the segment from the file */
 	/* TODO: This called when the first page fault occurs on address VA. */
@@ -747,6 +758,16 @@ setup_stack(struct intr_frame *if_) {
 	 * TODO: If success, set the rsp accordingly.
 	 * TODO: You should mark the page is stack. */
 	 /* TODO: Your code goes here */
+	uint8_t *kpage;
+
+	kpage = palloc_get_page(PAL_USER | PAL_ZERO);
+	if (kpage != NULL) {
+		success = install_page(((uint8_t *)USER_STACK) - PGSIZE, kpage, true);
+		if (success)
+			if_->rsp = USER_STACK;
+		else
+			palloc_free_page(kpage);
+	}
 
 	return success;
 }
