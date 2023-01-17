@@ -106,7 +106,7 @@ pass tests/vm/lazy-anon
 FAIL tests/vm/swap-file
 FAIL tests/vm/swap-anon
 FAIL tests/vm/swap-iter
-pass tests/vm/swap-fork
+FAIL tests/vm/swap-fork
 pass tests/filesys/base/lg-create
 pass tests/filesys/base/lg-full
 pass tests/filesys/base/lg-random

@@ -46,6 +46,7 @@ file_backed_swap_out(struct page *page) {
 /* Destory the file backed page. PAGE will be freed by the caller. */
 static void
 file_backed_destroy(struct page *page) {
+	do_munmap(page->va);
 	struct file_page *file_page UNUSED = &page->file;
 }
 
@@ -53,7 +54,6 @@ file_backed_destroy(struct page *page) {
 void *
 do_mmap(void *addr, size_t length, int writable,
 	struct file *file, off_t offset) {
-
 	void *st_addr = addr;
 	struct file *mfile = file_reopen(file);
 	struct thread *t_curr = thread_current();
@@ -90,7 +90,6 @@ do_mmap(void *addr, size_t length, int writable,
 		/* 오프셋을 옮겨보자 */
 		offset += page_read_bytes;
 	}
-	
 	return st_addr;
 }
 
@@ -108,11 +107,13 @@ void do_munmap (void *addr) {
 	가상 페이지가 free되는 것이 아님. present bit을 0으로 만드는 것! */
     while (true) {
 		struct page *page = spt_find_page(&thread_current()->spt, addr);
-		
+		// struct thread *t_curr = thread_current();
 		if (page == NULL) {
-			return NULL;
+			// page = pml4_get_page(t_curr->pml4,addr);
+			// if (page == NULL)
+				return NULL;
+				
 		}
-		
 		struct load_info *container = (struct load_info *)page->uninit.aux;
 		
 		/* 수정된 페이지(dirty bit == 1)는 파일에 업데이트해놓는다. 이후에 dirty bit을 0으로 만든다. */

@@ -180,7 +180,6 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 		bool user UNUSED, bool write UNUSED, bool not_present UNUSED) {
 	struct thread *t_curr = thread_current();
 	struct supplemental_page_table *spt UNUSED = &t_curr->spt;
-
 	// /* save stack pointer for stack_growth */
 	struct page *page = NULL;
 	page = spt_find_page(spt, addr);
@@ -361,5 +360,9 @@ page_lookup (const void *address, struct supplemental_page_table* spt) {
 }
 
 void page_destructor (struct hash_elem *hash_elem, void *aux) {
-	spt_remove_page(&thread_current()->spt, hash_entry(hash_elem, struct page, page_elem));
+	struct page* p = hash_entry(hash_elem, struct page, page_elem);
+	if (p->uninit.type == VM_FILE) {
+		do_munmap(p->va);
+	}
+	spt_remove_page(&thread_current()->spt, p);
 }
