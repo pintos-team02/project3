@@ -36,6 +36,8 @@
 
 /* User stack start */
 #define USER_STACK 0x47480000
+#define MAX_STACK_SIZE (1<<20)
+#define STACK_LIMIT (USER_STACK - MAX_STACK_SIZE)
 
 /* Returns true if VADDR is a user virtual address. */
 #define is_user_vaddr(vaddr) (!is_kernel_vaddr((vaddr)))

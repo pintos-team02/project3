@@ -20,6 +20,9 @@ file_open (struct inode *inode) {
 		file->inode = inode;
 		file->pos = 0;
 		file->deny_write = false;
+		// TODO: assertion `lock != NULL' failed occur
+		// lock_init(file->read_lock);
+		// lock_init(file->write_lock);
 		return file;
 	} else {
 		inode_close (inode);

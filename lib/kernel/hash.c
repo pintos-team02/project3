@@ -9,8 +9,7 @@
 #include "../debug.h"
 #include "threads/malloc.h"
 
-#define list_elem_to_hash_elem(LIST_ELEM)                       \
-	list_entry(LIST_ELEM, struct hash_elem, list_elem)
+
 
 static struct list *find_bucket (struct hash *, struct hash_elem *);
 static struct hash_elem *find_elem (struct hash *, struct list *,
@@ -30,7 +29,6 @@ hash_init (struct hash *h,
 	h->hash = hash;
 	h->less = less;
 	h->aux = aux;
-
 	if (h->buckets != NULL) {
 		hash_clear (h, NULL);
 		return true;
@@ -92,7 +90,6 @@ struct hash_elem *
 hash_insert (struct hash *h, struct hash_elem *new) {
 	struct list *bucket = find_bucket (h, new);
 	struct hash_elem *old = find_elem (h, bucket, new);
-
 	if (old == NULL)
 		insert_elem (h, bucket, new);
 

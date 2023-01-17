@@ -30,6 +30,7 @@ struct hash_elem {
 	struct list_elem list_elem;
 };
 
+
 /* Converts pointer to hash element HASH_ELEM into a pointer to
  * the structure that HASH_ELEM is embedded inside.  Supply the
  * name of the outer structure STRUCT and the member name MEMBER
@@ -38,6 +39,9 @@ struct hash_elem {
 #define hash_entry(HASH_ELEM, STRUCT, MEMBER)                   \
 	((STRUCT *) ((uint8_t *) &(HASH_ELEM)->list_elem        \
 		- offsetof (STRUCT, MEMBER.list_elem)))
+
+#define list_elem_to_hash_elem(LIST_ELEM)                       \
+	list_entry(LIST_ELEM, struct hash_elem, list_elem)
 
 /* Computes and returns the hash value for hash element E, given
  * auxiliary data AUX. */
