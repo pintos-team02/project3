@@ -77,7 +77,6 @@ vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable,
 				initializer = file_backed_initializer;
 				break;
 		}
-		
 		uninit_new(initial_page, upage, init, type, aux, initializer);
 		initial_page->writable = writable;
 		if (type == VM_STACK)
@@ -196,8 +195,6 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
 	if (not_present) {	
 		if (page == NULL) {
 			if (write && (addr >= rsp - 8) && (addr < USER_STACK) && addr > STACK_LIMIT) {
-				printf("page va, page writable %p, %d\n", page->va, page->writable);
-
 				vm_stack_growth(addr);
 				return true;
     		}

@@ -115,7 +115,7 @@ syscall_handler(struct intr_frame *f) {
 		break;
 	
 	case SYS_MMAP:
-		f->R.rax = mmap(f->R.rdi,f->R.rsi,f->R.rdx, f->R.rcx,f->R.r8);
+		f->R.rax = mmap(f->R.rdi,f->R.rsi,f->R.rdx, f->R.r10,f->R.r8);
 		break;
 
 	case SYS_MUNMAP:
@@ -147,7 +147,9 @@ check_address(void *addr) {
 
 	if (pml4_get_page(t_curr->pml4, addr) == NULL) {
 		if (!spt_find_page(&t_curr->spt, addr))
+		{
 			exit(-1);
+		}
 	}
 }
 
@@ -240,10 +242,11 @@ filesize(int fd) {
 int
 read(int fd, void *buffer, unsigned size) {
 	check_address(buffer);
-	
 	struct page* page = spt_find_page(&thread_current()->spt, buffer);
 	if (!page->writable)
+	{
 		exit(-1);
+	}
 
 	if (fd == STDIN_FILENO)
 	{
@@ -290,8 +293,9 @@ int
 write(int fd, const void *buffer, unsigned size) {
 	check_address(buffer);
 	struct page* page = spt_find_page(&thread_current()->spt, buffer);
-	if (!page->writable)
+	if (!page->writable) {
 		exit(-1);
+	}
 
 	if (fd == STDOUT_FILENO) {
 		putbuf(buffer, size);
@@ -368,8 +372,20 @@ intr_frame_cpy(struct intr_frame *f)
 
 void *
 mmap (void *addr, size_t length, int writable, int fd, off_t offset) {
-	struct thread *t_curr = thread_current();
-	struct file *file = t_curr->fdt[fd];
+
+	if (addr == 0 || is_kernel_vaddr(addr) || pg_round_down(addr) != addr || spt_find_page(&thread_current()->spt,addr) \
+		|| offset > PGSIZE
+		|| (long) length <= 0)
+		return NULL;
+
+	// CASE 7 -9
+	if (offset % PGSIZE != 0 || length == 0)
+		return NULL;
+
+	// CASE 7-9
+	struct file *file = thread_current()->fdt[fd];
+	if(fd == 0 || fd == 1 || file == NULL || file_length(file) == 0)
+		return NULL;
 
 	return do_mmap(addr, length, writable, file, offset);
 }

@@ -476,6 +476,7 @@ load(const char *file_name, struct intr_frame *if_) {
 					read_bytes = 0;
 					zero_bytes = ROUND_UP(page_offset + phdr.p_memsz, PGSIZE);
 				}
+				
 				if (!load_segment(file, file_page, (void *)mem_page,
 					read_bytes, zero_bytes, writable))
 						goto done;
@@ -724,7 +725,7 @@ load_segment(struct file *file, off_t ofs, uint8_t *upage,
 		zero_bytes -= page_zero_bytes;
 		upage += PGSIZE;
 
-		/* 오프셋을 옮겨보자 */
+		/* 오프셋을 갱신 해주어야 한다. */
 		ofs += page_read_bytes;
 	}
 	return true;
